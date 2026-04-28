@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "OCR Page Capture",
+  "version": "1.0",
+  "description": "PDFページをキャプチャしてGeminiに送るための拡張機能",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "sidePanel",
+    "scripting",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://gemini.google.com/*",
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://gemini.google.com/*"],
+      "js": ["gemini_content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "commands": {
+    "capture-page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "現在のページをキャプチャしてバッファに追加"
+    }
+  },
+  "action": {
+    "default_title": "OCR Capture - クリックでサイドパネルを開く"
+  }
+}

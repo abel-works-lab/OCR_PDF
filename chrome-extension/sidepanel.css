@@ -1,0 +1,230 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Segoe UI", sans-serif;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+  flex-shrink: 0;
+}
+
+.title {
+  font-weight: 700;
+  font-size: 15px;
+  color: #e94560;
+}
+
+.badge {
+  background: #e94560;
+  color: #fff;
+  border-radius: 10px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 700;
+  min-width: 22px;
+  text-align: center;
+}
+
+.section {
+  padding: 10px 14px;
+  border-bottom: 1px solid #0f3460;
+  flex-shrink: 0;
+}
+
+.label {
+  display: block;
+  font-size: 11px;
+  color: #888;
+  margin-bottom: 5px;
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+}
+
+input[type="text"] {
+  flex: 1;
+  background: #0f3460;
+  border: 1px solid #1a4a80;
+  border-radius: 4px;
+  color: #e0e0e0;
+  padding: 5px 8px;
+  font-size: 12px;
+  outline: none;
+}
+
+input[type="text"]:focus {
+  border-color: #e94560;
+}
+
+.btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.btn:hover {
+  opacity: 0.85;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a80;
+  width: 100%;
+}
+
+.btn-secondary {
+  background: #0f3460;
+  color: #e0e0e0;
+  border: 1px solid #1a4a80;
+}
+
+.btn-accent {
+  background: #e94560;
+  color: #fff;
+  flex: 1;
+}
+
+.btn-danger {
+  background: #333;
+  color: #e0e0e0;
+}
+
+/* 画像グリッドは残りの高さを全部使う */
+.grid-section {
+  flex: 1;
+  overflow-y: auto;
+  border-bottom: none;
+}
+
+.image-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding-bottom: 4px;
+}
+
+.image-card {
+  background: #16213e;
+  border-radius: 6px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid #0f3460;
+}
+
+.image-card img {
+  width: 100%;
+  display: block;
+  aspect-ratio: 3/4;
+  object-fit: contain;
+}
+
+.image-card .card-label {
+  padding: 4px 6px;
+  font-size: 10px;
+  color: #aaa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.image-card .btn-delete {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  background: rgba(0,0,0,0.7);
+  color: #e94560;
+  border: none;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+}
+
+.image-card .btn-delete:hover {
+  background: #e94560;
+  color: #fff;
+}
+
+.image-card.sent {
+  opacity: 0.65;
+  border-color: #4caf50;
+}
+
+.sent-badge {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  background: #4caf50;
+  color: #fff;
+  border-radius: 50%;
+  width: 18px;
+  height: 18px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.empty-message {
+  color: #555;
+  text-align: center;
+  padding: 24px 0;
+  font-size: 12px;
+  grid-column: 1 / -1;
+}
+
+footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #16213e;
+  border-top: 1px solid #0f3460;
+  flex-shrink: 0;
+}
+
+.status {
+  text-align: center;
+  padding: 4px 14px;
+  font-size: 11px;
+  color: #e94560;
+  min-height: 20px;
+  flex-shrink: 0;
+}
