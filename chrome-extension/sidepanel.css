@@ -228,3 +228,28 @@ footer {
   min-height: 20px;
   flex-shrink: 0;
 }
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #aaa;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+  accent-color: #e94560;
+  width: 13px;
+  height: 13px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.scroll-progress {
+  margin-top: 6px;
+  font-size: 11px;
+  color: #4caf50;
+  text-align: center;
+}

@@ -1,32 +1,85 @@
 // IMAGE_CAP_SYNC: sidepanel.js の IMAGE_CAP と必ず同じ値にすること
 const IMAGE_CAP = 50;
-// フルページキャプチャ(jpeg quality 85)は1枚2〜5MB。9MBを超えたら古い画像を削る
-const MAX_STORAGE_BYTES = 9 * 1024 * 1024;
 // A4縦 96dpi 相当（汎用ページのページ高さ推定値）
 const A4_HEIGHT_PX = 1123;
+const DB_NAME = "ocr-capture-db";
+const STORE_NAME = "images";
+const DB_VERSION = 1;
+const KEEPALIVE_ALARM = "sw-keepalive";
+let _lastCaptureTime = 0;
+let _scrollCaptureAborted = false;
+
+// ---- IndexedDB ----
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: "id" });
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
 
 async function getImages() {
-  const { images = [] } = await chrome.storage.session.get("images");
-  return images;
+  try {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readonly");
+      const req = tx.objectStore(STORE_NAME).getAll();
+      req.onsuccess = (e) => {
+        const rows = e.target.result;
+        rows.sort((a, b) => a.timestamp - b.timestamp);
+        resolve(rows);
+      };
+      req.onerror = (e) => reject(e.target.error);
+    });
+  } catch (e) {
+    console.error("[OCR BG] getImages 失敗:", e);
+    return [];
+  }
 }
 
 async function saveImages(images) {
-  // バイト数ベースで古い画像を削る（storage.session の上限は約10MB）
-  let total = 0;
-  const kept = [];
-  for (let i = images.length - 1; i >= 0; i--) {
-    const size = images[i].dataUrl.length;
-    if (total + size > MAX_STORAGE_BYTES) break;
-    total += size;
-    kept.unshift(images[i]);
-  }
-  const capped = kept.length > IMAGE_CAP ? kept.slice(-IMAGE_CAP) : kept;
   try {
-    await chrome.storage.session.set({ images: capped });
+    const capped = images.length > IMAGE_CAP ? images.slice(-IMAGE_CAP) : images;
+    const db = await openDB();
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, "readwrite");
+      const store = tx.objectStore(STORE_NAME);
+      store.clear();
+      for (const img of capped) store.put(img);
+      tx.oncomplete = resolve;
+      tx.onerror = (e) => reject(e.target.error);
+    });
+    notifySidePanel(capped);
   } catch (e) {
+    console.error("[OCR BG] saveImages 失敗:", e);
     throw new Error(`画像保存失敗: ${e.message}`);
   }
-  notifySidePanel(capped);
+}
+
+// ---- Service Worker keepalive ----
+
+// MV3 の SW はアイドル30秒で停止するため 25秒ごとに alarm で起こす
+chrome.alarms.create(KEEPALIVE_ALARM, { periodInMinutes: 25 / 60 });
+chrome.alarms.onAlarm.addListener((alarm) => {
+  if (alarm.name === KEEPALIVE_ALARM) { /* SW を生かし続けるだけ */ }
+});
+
+// ---- ユーティリティ ----
+
+// captureVisibleTab のレート制限ラッパー（1秒2回上限対策）
+async function captureVisibleTabSafe(windowId, options) {
+  const now = Date.now();
+  const wait = 500 - (now - _lastCaptureTime);
+  if (wait > 0) await new Promise(r => setTimeout(r, wait));
+  _lastCaptureTime = Date.now();
+  return chrome.tabs.captureVisibleTab(windowId, options);
 }
 
 // サイドパネルに更新を通知（images を一緒に送ることで GET_IMAGES の往復を省く）
@@ -34,13 +87,53 @@ function notifySidePanel(images) {
   chrome.runtime.sendMessage({ type: "IMAGE_UPDATED", images }).catch(() => {});
 }
 
-// 現在のアクティブタブをキャプチャしてバッファに追加
+// スクロールキャプチャの進捗をサイドパネルに通知
+function notifyProgress(current, total) {
+  chrome.runtime.sendMessage({ type: "SCROLL_PROGRESS", current, total }).catch(() => {});
+}
+
+// ---- リンクラベル焼き込み ----
+
+// OffscreenCanvas でリンク位置に L0〜Ln ラベルを焼き込む
+// （Gemini へのリンク参照精度向上用。呼び出し側で links = [{id, bbox:{x,y}}] を渡す）
+async function drawLabeledLinks(dataUrl, links, zoom = 1, devicePixelRatio = 1) {
+  const scale = devicePixelRatio * zoom;
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const bitmap = await createImageBitmap(blob);
+  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+  const ctx = canvas.getContext("2d");
+  ctx.drawImage(bitmap, 0, 0);
+  ctx.font = "bold 13px monospace";
+  ctx.textBaseline = "top";
+  for (const link of links) {
+    const { id, bbox } = link;
+    if (!bbox) continue;
+    const x = bbox.x * scale;
+    const y = bbox.y * scale;
+    const label = `L${id}`;
+    const metrics = ctx.measureText(label);
+    ctx.fillStyle = "yellow";
+    ctx.fillRect(x, y, metrics.width + 4, 17);
+    ctx.fillStyle = "red";
+    ctx.fillText(label, x + 2, y + 1);
+  }
+  const outBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.9 });
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(outBlob);
+  });
+}
+
+// ---- 手動キャプチャ ----
+
 async function captureCurrentTab(label) {
   let [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
   if (!tab) [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return { success: false, error: "アクティブタブが見つかりません" };
 
-  const dataUrl = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 85 });
+  const dataUrl = await captureVisibleTabSafe(tab.windowId, { format: "jpeg", quality: 85 });
   const images = await getImages();
   images.push({
     id: crypto.randomUUID(),
@@ -52,8 +145,8 @@ async function captureCurrentTab(label) {
   return { success: true };
 }
 
-// ページ番号リストに従ってスクロール→キャプチャを繰り返す
-// URL遷移でズームがリセットされるため、遷移前に保存して毎回復元する
+// ---- ページ番号指定キャプチャ（PDF向け） ----
+
 async function scrollAndCapture(tabId, pageNumbers, delay = 1500) {
   const targetTab    = await chrome.tabs.get(tabId);
   const windowId     = targetTab.windowId;
@@ -72,7 +165,7 @@ async function scrollAndCapture(tabId, pageNumbers, delay = 1500) {
     }
     // PDFビューアはcomplete後も描画が続くため追加待機
     await new Promise(r => setTimeout(r, 400));
-    const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 85 });
+    const dataUrl = await captureVisibleTabSafe(windowId, { format: "jpeg", quality: 85 });
     newItems.push({
       id: crypto.randomUUID(),
       dataUrl,
@@ -131,6 +224,113 @@ async function scrollToPage(tabId, pageNum, delay = 1500) {
     args: [pageNum, A4_HEIGHT_PX],
   });
 }
+
+// ---- 全体スクロールキャプチャ（Note・ブログ等） ----
+
+async function startScrollCapture(tabId, windowId, mainOnlyMode = false) {
+  _scrollCaptureAborted = false;
+
+  const [dimResult] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+    }),
+  });
+  const { scrollHeight, viewportHeight } = dimResult.result;
+  const step = Math.floor(viewportHeight * 0.8);
+  const totalSteps = Math.max(1, Math.ceil((scrollHeight - viewportHeight) / step) + 1);
+
+  // fixed/sticky 要素を一時非表示にしてヘッダー・サイドバーの重複を防ぐ
+  if (mainOnlyMode) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        window.__ocrHiddenEls = [];
+        for (const el of document.querySelectorAll('*')) {
+          const s = getComputedStyle(el);
+          if ((s.position === 'fixed' || s.position === 'sticky') && !el.dataset.ocrHidden) {
+            el.dataset.ocrHidden = '1';
+            el.dataset.ocrOrigDisplay = el.style.display || '';
+            el.style.display = 'none';
+            window.__ocrHiddenEls.push(el);
+          }
+        }
+      },
+    });
+  }
+
+  // ページトップにリセット
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => window.scrollTo({ top: 0, behavior: "instant" }),
+  });
+  await new Promise(r => setTimeout(r, 600));
+
+  const existing = await getImages();
+  const newItems = [];
+
+  try {
+    for (let i = 0; i < totalSteps; i++) {
+      if (_scrollCaptureAborted) break;
+
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: (top) => window.scrollTo({ top, behavior: "instant" }),
+        args: [i * step],
+      });
+
+      // lazy load の DOM 安定待機（最大1秒）
+      await waitForDomStable(tabId, 400, 1000);
+
+      const dataUrl = await captureVisibleTabSafe(windowId, { format: "jpeg", quality: 85 });
+      newItems.push({
+        id: crypto.randomUUID(),
+        dataUrl,
+        label: `scroll-${i + 1}`,
+        timestamp: Date.now(),
+      });
+      await saveImages([...existing, ...newItems]);
+      notifyProgress(i + 1, totalSteps);
+    }
+  } finally {
+    // fixed/sticky 要素を元に戻す
+    if (mainOnlyMode) {
+      await chrome.scripting.executeScript({
+        target: { tabId },
+        func: () => {
+          for (const el of (window.__ocrHiddenEls || [])) {
+            el.style.display = el.dataset.ocrOrigDisplay || '';
+            delete el.dataset.ocrHidden;
+            delete el.dataset.ocrOrigDisplay;
+          }
+          window.__ocrHiddenEls = [];
+        },
+      });
+    }
+  }
+
+  return { success: true, count: newItems.length };
+}
+
+// DOM の変化が stableMs 間なくなるまで待機（lazy load 対策）
+async function waitForDomStable(tabId, stableMs = 400, timeoutMs = 1000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const [before] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => document.body ? document.body.innerHTML.length : 0,
+    });
+    await new Promise(r => setTimeout(r, stableMs));
+    const [after] = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => document.body ? document.body.innerHTML.length : 0,
+    });
+    if (before.result === after.result) break;
+  }
+}
+
+// ---- Gemini 注入 ----
 
 // GeminiページのMAIN worldで実行するファイル注入関数（self-contained）
 function geminiInjectMain(dataUrls) {
@@ -350,6 +550,8 @@ async function injectToGemini() {
   return result;
 }
 
+// ---- イベントリスナー ----
+
 // ショートカットキー
 chrome.commands.onCommand.addListener((command) => {
   if (command === "capture-page") captureCurrentTab();
@@ -371,6 +573,14 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
         if (!tabs[0]) { sendResponse({ success: false, error: "アクティブタブが見つかりません" }); return; }
         sendResponse(await scrollAndCapture(tabs[0].id, msg.pageNumbers, msg.delay ?? 1500));
+      } else if (msg.type === "START_SCROLL_CAPTURE") {
+        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (!tabs[0]) { sendResponse({ success: false, error: "アクティブタブが見つかりません" }); return; }
+        const tab = tabs[0];
+        sendResponse(await startScrollCapture(tab.id, tab.windowId, msg.mainOnlyMode ?? false));
+      } else if (msg.type === "ABORT_SCROLL_CAPTURE") {
+        _scrollCaptureAborted = true;
+        sendResponse({ success: true });
       } else if (msg.type === "GET_IMAGES") {
         sendResponse({ images: await getImages() });
       } else if (msg.type === "CLEAR_IMAGES") {

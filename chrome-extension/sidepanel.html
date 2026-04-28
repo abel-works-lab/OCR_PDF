@@ -32,6 +32,21 @@
     </div>
   </section>
 
+  <section class="section">
+    <label class="label">スクロールキャプチャ（Note・ブログ等）</label>
+    <div class="row" style="margin-bottom:6px;">
+      <label class="toggle-label">
+        <input type="checkbox" id="main-only-toggle" checked />
+        <span>ヘッダー・サイドバーを非表示にしてキャプチャ</span>
+      </label>
+    </div>
+    <div class="row">
+      <button id="btn-scroll-capture" class="btn btn-secondary" style="flex:1;">全体スクロールキャプチャ</button>
+      <button id="btn-abort-scroll" class="btn btn-danger" style="display:none;">中断</button>
+    </div>
+    <div id="scroll-progress" class="scroll-progress" style="display:none;"></div>
+  </section>
+
   <section class="section grid-section">
     <div id="image-grid" class="image-grid"></div>
   </section>

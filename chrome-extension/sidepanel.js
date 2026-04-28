@@ -177,6 +177,49 @@ document.getElementById("btn-auto-capture").addEventListener("click", async () =
   }
 });
 
+document.getElementById("btn-scroll-capture").addEventListener("click", async () => {
+  const btnScroll = document.getElementById("btn-scroll-capture");
+  const btnAbort  = document.getElementById("btn-abort-scroll");
+  const progressEl = document.getElementById("scroll-progress");
+  const mainOnly = document.getElementById("main-only-toggle").checked;
+
+  btnScroll.disabled = true;
+  btnAbort.style.display = "";
+  progressEl.style.display = "";
+  progressEl.textContent = "スキャン中... 0 / ?";
+  showStatus("スクロールキャプチャ開始中...");
+
+  let res;
+  try {
+    res = await chrome.runtime.sendMessage({
+      type: "START_SCROLL_CAPTURE",
+      mainOnlyMode: mainOnly,
+    });
+  } catch (e) {
+    showStatus(e.message || "通信エラー", true);
+    btnScroll.disabled = false;
+    btnAbort.style.display = "none";
+    progressEl.style.display = "none";
+    return;
+  }
+
+  btnScroll.disabled = false;
+  btnAbort.style.display = "none";
+  progressEl.style.display = "none";
+
+  if (res?.success) {
+    showStatus(`✓ ${res.count}枚キャプチャしました`);
+    await loadImages();
+  } else {
+    showStatus(res?.error || "キャプチャ失敗", true);
+  }
+});
+
+document.getElementById("btn-abort-scroll").addEventListener("click", async () => {
+  await chrome.runtime.sendMessage({ type: "ABORT_SCROLL_CAPTURE" });
+  showStatus("中断しました");
+});
+
 document.getElementById("btn-inject").addEventListener("click", async () => {
   const btnInject = document.getElementById("btn-inject");
   btnInject.disabled = true;
@@ -212,6 +255,9 @@ chrome.runtime.onMessage.addListener((msg) => {
     } else {
       loadImages();
     }
+  } else if (msg.type === "SCROLL_PROGRESS") {
+    const progressEl = document.getElementById("scroll-progress");
+    if (progressEl) progressEl.textContent = `スキャン中... ${msg.current} / ${msg.total}`;
   }
 });
 
