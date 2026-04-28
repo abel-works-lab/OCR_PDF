@@ -233,7 +233,16 @@ document.getElementById("btn-gemini-format").addEventListener("click", async () 
   if (payload.length > MAX_BYTES) {
     payload = payload.slice(0, MAX_BYTES) + "\n<!-- ... (省略) -->";
   }
-  const text = `以下のHTMLを、見た目・構造・文字を忠実に再現したきれいなHTMLに整形してください。\n\n\`\`\`html\n${payload}\n\`\`\``;
+  const text = `以下のHTMLを、見た目・構造・文字を忠実に再現したきれいなHTMLに整形してください。
+
+【絶対に守るルール】
+- <img>タグは必ずそのまま保持すること。src属性のURLを一切変更しないこと
+- 画像を「[画像：説明]」などのテキストに置き換えることは禁止
+- 画像が表示されない場合でも、imgタグのHTMLはそのまま出力すること
+
+\`\`\`html
+${payload}
+\`\`\``;
 
   let res;
   try {
