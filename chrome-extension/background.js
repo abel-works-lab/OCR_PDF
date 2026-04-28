@@ -276,9 +276,11 @@ async function startScrollCapture(tabId, windowId, mainOnlyMode = false) {
 
       await chrome.scripting.executeScript({
         target: { tabId },
-        func: (top) => window.scrollTo({ top, behavior: "instant" }),
+        func: (top) => window.scrollTo({ top, behavior: "smooth" }),
         args: [i * step],
       });
+      // smooth scroll の完了を待つ
+      await new Promise(r => setTimeout(r, 500));
 
       // lazy load の DOM 安定待機（最大1秒）
       await waitForDomStable(tabId, 400, 1000);
@@ -359,10 +361,10 @@ async function runExtractPageContent(tabId) {
   for (let i = 1; i <= totalSteps; i++) {
     await chrome.scripting.executeScript({
       target: { tabId },
-      func: (top) => window.scrollTo({ top, behavior: "instant" }),
+      func: (top) => window.scrollTo({ top, behavior: "smooth" }),
       args: [i * step],
     });
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 600));
   }
   // トップに戻す
   await chrome.scripting.executeScript({
