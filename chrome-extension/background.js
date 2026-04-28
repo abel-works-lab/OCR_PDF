@@ -443,7 +443,7 @@ async function runExtractPageContent(tabId) {
         '[class*="popup"]','[class*="modal"]','[role="navigation"]','[role="banner"]',
         '[role="complementary"]','[role="dialog"]',
       ];
-      const KEEP_ATTRS = new Set(['href','src','alt','colspan','rowspan']);
+      const KEEP_ATTRS = new Set(['href','src','srcset','alt','width','height','colspan','rowspan']);
 
       // メインコンテンツエリアを特定（article > main > body の優先順）
       const main =
@@ -460,7 +460,32 @@ async function runExtractPageContent(tabId) {
         try { for (const el of clone.querySelectorAll(sel)) el.remove(); } catch {}
       }
 
-      // 属性クリーニング（href/src等だけ残して他は全削除）
+      // lazy load 対応：data-src / data-lazy-src / data-original → src に移す
+      for (const img of clone.querySelectorAll('img')) {
+        const lazySrc = img.getAttribute('data-src') ||
+                        img.getAttribute('data-lazy-src') ||
+                        img.getAttribute('data-original') ||
+                        img.getAttribute('data-img-src');
+        if (lazySrc && !img.src) img.setAttribute('src', lazySrc);
+        // 相対URL → 絶対URL に変換（location.origin を利用）
+        if (img.src && img.src.startsWith('/')) {
+          img.setAttribute('src', location.origin + img.src);
+        }
+        // srcset 内の相対URLも絶対化
+        if (img.srcset) {
+          img.setAttribute('srcset', img.srcset.replace(/(^|,\s*)\/([^\s,]+)/g,
+            (_, sep, path) => `${sep}${location.origin}/${path}`));
+        }
+      }
+
+      // aタグの相対URL → 絶対URL
+      for (const a of clone.querySelectorAll('a[href]')) {
+        try {
+          a.setAttribute('href', new URL(a.getAttribute('href'), location.href).href);
+        } catch {}
+      }
+
+      // 属性クリーニング（KEEP_ATTRS だけ残して他は全削除）
       for (const el of clone.querySelectorAll('*')) {
         const drop = [...el.attributes].filter(a => !KEEP_ATTRS.has(a.name)).map(a => a.name);
         for (const a of drop) el.removeAttribute(a);
