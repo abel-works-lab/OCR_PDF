@@ -8,11 +8,12 @@ const statusEl = document.getElementById("status");
 
 let statusTimer = null;
 
-function showStatus(msg, isError = false) {
+function showStatus(msg, isError = false, durationMs = null) {
   statusEl.textContent = msg;
   statusEl.style.color = isError ? "#e94560" : "#4caf50";
   clearTimeout(statusTimer);
-  statusTimer = setTimeout(() => (statusEl.textContent = ""), isError ? 10000 : 3000);
+  const ms = durationMs ?? (isError ? 10000 : 3000);
+  statusTimer = setTimeout(() => (statusEl.textContent = ""), ms);
 }
 
 // 「1,3,5-7」→ [1,3,5,6,7]（合計201枚以上は拒否）
@@ -301,7 +302,11 @@ document.getElementById("btn-inject").addEventListener("click", async () => {
   try {
     const res = await chrome.runtime.sendMessage({ type: "INJECT_TO_GEMINI" });
     if (res?.success) {
-      showStatus("✓ Geminiに送りました。入力欄に画像が表示されます");
+      if (res.remaining > 0) {
+        showStatus(`✓ ${res.sent}枚送りました。残り${res.remaining}枚 → もう一度「Geminiに送る」を押してください`, false, 15000);
+      } else {
+        showStatus(`✓ ${res.sent}枚をGeminiに送りました`);
+      }
     } else {
       showStatus(res?.error || "注入失敗", true);
     }

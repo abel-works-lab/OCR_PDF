@@ -697,6 +697,9 @@ async function pickGeminiTab() {
   )[0];
 }
 
+// Gemini 1メッセージあたりの添付上限
+const GEMINI_IMAGE_CAP = 10;
+
 // Geminiタブにworld:"MAIN"でスクリプトを直接実行して注入
 async function injectToGemini() {
   console.log("[OCR BG] injectToGemini 開始");
@@ -707,9 +710,13 @@ async function injectToGemini() {
   if (images.length === 0) return { success: false, error: "バッファに画像がありません" };
   if (unsent.length  === 0) return { success: false, error: "未送信の画像がありません（全て送信済み）" };
 
+  // Geminiの上限（10枚）を超える場合は先頭10枚だけ送る
+  const batch     = unsent.slice(0, GEMINI_IMAGE_CAP);
+  const remaining = unsent.length - batch.length;
+
   const tab = await pickGeminiTab();
   if (!tab) return { success: false, error: "Geminiのタブが見つかりません" };
-  console.log("[OCR BG] 選択タブ:", tab.url);
+  console.log("[OCR BG] 選択タブ:", tab.url, "/ 今回送信:", batch.length, "/ 残り:", remaining);
 
   let result;
   try {
@@ -717,7 +724,7 @@ async function injectToGemini() {
       target: { tabId: tab.id },
       world: "MAIN",
       func: geminiInjectMain,
-      args: [unsent.map(img => img.dataUrl)],
+      args: [batch.map(img => img.dataUrl)],
     });
     result = results[0]?.result ?? { success: false, error: "実行結果が取得できませんでした" };
   } catch (e) {
@@ -726,13 +733,13 @@ async function injectToGemini() {
   }
 
   if (result.success) {
-    const now       = Date.now();
-    const unsentIds = new Set(unsent.map(img => img.id));
-    const updated   = images.map(img => unsentIds.has(img.id) ? { ...img, sentAt: now } : img);
+    const now      = Date.now();
+    const batchIds = new Set(batch.map(img => img.id));
+    const updated  = images.map(img => batchIds.has(img.id) ? { ...img, sentAt: now } : img);
     await saveImages(updated);
   }
 
-  return result;
+  return { ...result, sent: batch.length, remaining };
 }
 
 // ---- イベントリスナー ----
