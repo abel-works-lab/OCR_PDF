@@ -312,7 +312,64 @@ async function startScrollCapture(tabId, windowId, mainOnlyMode = false) {
     }
   }
 
+  // 全スクショを1枚の長い画像にスティッチ
+  if (newItems.length > 1) {
+    notifyProgress(newItems.length, newItems.length);
+    const stitchedUrl = await stitchImages(newItems.map(img => img.dataUrl)).catch(() => null);
+    if (stitchedUrl) {
+      const stitchedItem = {
+        id: crypto.randomUUID(),
+        dataUrl: stitchedUrl,
+        label: "scan-complete",
+        timestamp: Date.now(),
+        isStitched: true,
+      };
+      await saveImages([...existing, ...newItems, stitchedItem]);
+    }
+  }
+
   return { success: true, count: newItems.length };
+}
+
+// スクショを縦に並べて1枚の長い画像にスティッチ（コピー機スキャンイメージ）
+// stepRatio: スクロール1ステップ = viewport の何割か（0.8 固定）
+async function stitchImages(dataUrls, stepRatio = 0.8) {
+  if (dataUrls.length === 0) return null;
+
+  // 最初の画像でサイズ取得
+  const firstBlob = await fetch(dataUrls[0]).then(r => r.blob());
+  const firstBitmap = await createImageBitmap(firstBlob);
+  const imgW = firstBitmap.width;
+  const imgH = firstBitmap.height;
+  const stepPx = Math.floor(imgH * stepRatio);
+  const totalH = stepPx * (dataUrls.length - 1) + imgH;
+
+  // キャンバスサイズ上限（Chrome最大 32767px。超える場合は縮小）
+  const MAX_H = 32000;
+  const scale = totalH > MAX_H ? MAX_H / totalH : 1;
+  const canvasW = Math.floor(imgW * scale);
+  const canvasH = Math.floor(totalH * scale);
+
+  const canvas = new OffscreenCanvas(canvasW, canvasH);
+  const ctx = canvas.getContext("2d");
+
+  ctx.drawImage(firstBitmap, 0, 0, canvasW, Math.floor(imgH * scale));
+  firstBitmap.close();
+
+  for (let i = 1; i < dataUrls.length; i++) {
+    const blob = await fetch(dataUrls[i]).then(r => r.blob());
+    const bm = await createImageBitmap(blob);
+    const dy = Math.floor(i * stepPx * scale);
+    ctx.drawImage(bm, 0, dy, canvasW, Math.floor(imgH * scale));
+    bm.close();
+  }
+
+  const outBlob = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.92 });
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(outBlob);
+  });
 }
 
 // DOM の変化が stableMs 間なくなるまで待機（lazy load 対策）

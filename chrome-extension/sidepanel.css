@@ -229,6 +229,19 @@ footer {
   flex-shrink: 0;
 }
 
+.image-card.stitched {
+  grid-column: 1 / -1;
+  border-color: #e94560;
+  border-width: 2px;
+}
+
+.image-card.stitched img {
+  aspect-ratio: auto;
+  max-height: 200px;
+  object-fit: cover;
+  object-position: top;
+}
+
 .dom-result {
   margin-top: 8px;
 }

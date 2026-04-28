@@ -51,7 +51,7 @@ function renderGrid(images) {
 
   for (const img of images) {
     const card = document.createElement("div");
-    card.className = "image-card" + (img.sentAt ? " sent" : "");
+    card.className = "image-card" + (img.sentAt ? " sent" : "") + (img.isStitched ? " stitched" : "");
     card.dataset.id = img.id;
 
     const imgEl = document.createElement("img");
