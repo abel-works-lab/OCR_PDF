@@ -177,6 +177,80 @@ document.getElementById("btn-auto-capture").addEventListener("click", async () =
   }
 });
 
+let _extractedHtml = null;
+
+document.getElementById("btn-extract-dom").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-extract-dom");
+  const resultEl = document.getElementById("dom-result");
+  const infoEl = document.getElementById("dom-info");
+
+  btn.disabled = true;
+  resultEl.style.display = "none";
+  _extractedHtml = null;
+  showStatus("ページをスキャン中...");
+
+  let res;
+  try {
+    res = await chrome.runtime.sendMessage({ type: "EXTRACT_DOM" });
+  } catch (e) {
+    showStatus(e.message || "通信エラー", true);
+    btn.disabled = false;
+    return;
+  }
+
+  btn.disabled = false;
+  if (res?.success) {
+    _extractedHtml = res.cleanHtml;
+    const kb = (res.charCount / 1024).toFixed(1);
+    infoEl.textContent = `「${res.title}」 ${kb} KB`;
+    resultEl.style.display = "";
+    showStatus("✓ HTML取得完了");
+  } else {
+    showStatus(res?.error || "取得失敗", true);
+  }
+});
+
+document.getElementById("btn-copy-html").addEventListener("click", async () => {
+  if (!_extractedHtml) return;
+  try {
+    await navigator.clipboard.writeText(_extractedHtml);
+    showStatus("✓ クリップボードにコピーしました");
+  } catch {
+    showStatus("コピー失敗（権限エラー）", true);
+  }
+});
+
+document.getElementById("btn-gemini-format").addEventListener("click", async () => {
+  if (!_extractedHtml) return;
+  const btn = document.getElementById("btn-gemini-format");
+  btn.disabled = true;
+  showStatus("Geminiに送信中...");
+
+  // 50KB超は innerText 相当に縮小して送る（Geminiの入力制限対策）
+  const MAX_BYTES = 50 * 1024;
+  let payload = _extractedHtml;
+  if (payload.length > MAX_BYTES) {
+    payload = payload.slice(0, MAX_BYTES) + "\n<!-- ... (省略) -->";
+  }
+  const text = `以下のHTMLを、見た目・構造・文字を忠実に再現したきれいなHTMLに整形してください。\n\n\`\`\`html\n${payload}\n\`\`\``;
+
+  let res;
+  try {
+    res = await chrome.runtime.sendMessage({ type: "INJECT_TEXT_TO_GEMINI", text });
+  } catch (e) {
+    showStatus(e.message || "通信エラー", true);
+    btn.disabled = false;
+    return;
+  }
+
+  btn.disabled = false;
+  if (res?.success) {
+    showStatus("✓ Geminiに送りました");
+  } else {
+    showStatus(res?.error || "送信失敗", true);
+  }
+});
+
 document.getElementById("btn-scroll-capture").addEventListener("click", async () => {
   const btnScroll = document.getElementById("btn-scroll-capture");
   const btnAbort  = document.getElementById("btn-abort-scroll");

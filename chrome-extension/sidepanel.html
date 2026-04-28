@@ -33,6 +33,18 @@
   </section>
 
   <section class="section">
+    <label class="label">DOM取得（WebページのHTML直接抽出）</label>
+    <button id="btn-extract-dom" class="btn btn-secondary" style="width:100%;">HTMLを取得</button>
+    <div id="dom-result" class="dom-result" style="display:none;">
+      <div id="dom-info" class="dom-info"></div>
+      <div class="row" style="margin-top:6px;">
+        <button id="btn-copy-html" class="btn btn-secondary" style="flex:1;">コピー</button>
+        <button id="btn-gemini-format" class="btn btn-accent" style="flex:1;">Geminiで整形</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
     <label class="label">スクロールキャプチャ（Note・ブログ等）</label>
     <div class="row" style="margin-bottom:6px;">
       <label class="toggle-label">

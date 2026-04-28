@@ -332,6 +332,132 @@ async function waitForDomStable(tabId, stableMs = 400, timeoutMs = 1000) {
 
 // ---- Gemini 注入 ----
 
+// ---- DOM取得（Webページ専用） ----
+
+// ページをスクロールしてlazy loadを発火させ、メインコンテンツのHTMLを抽出する
+async function runExtractPageContent(tabId) {
+  // トップにリセット
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => window.scrollTo({ top: 0, behavior: "instant" }),
+  });
+  await new Promise(r => setTimeout(r, 400));
+
+  // スクロール高さを取得
+  const [dim] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => ({
+      scrollHeight: document.documentElement.scrollHeight,
+      viewportHeight: window.innerHeight,
+    }),
+  });
+  const { scrollHeight, viewportHeight } = dim.result;
+  const step = viewportHeight;
+  const totalSteps = Math.ceil(scrollHeight / step);
+
+  // 上から下まで1画面ずつスクロール（lazy loadを全部発火）
+  for (let i = 1; i <= totalSteps; i++) {
+    await chrome.scripting.executeScript({
+      target: { tabId },
+      func: (top) => window.scrollTo({ top, behavior: "instant" }),
+      args: [i * step],
+    });
+    await new Promise(r => setTimeout(r, 300));
+  }
+  // トップに戻す
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => window.scrollTo({ top: 0, behavior: "instant" }),
+  });
+  await new Promise(r => setTimeout(r, 300));
+
+  // メインコンテンツを抽出・クリーニング
+  const [result] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => {
+      const NOISE = [
+        'script','style','noscript','iframe','link','meta',
+        'nav','header','footer','aside',
+        '[class*="sidebar"]','[class*="nav"]','[class*="header"]','[class*="footer"]',
+        '[class*="ad"]','[class*="banner"]','[class*="recommend"]','[class*="related"]',
+        '[class*="share"]','[class*="social"]','[class*="comment"]','[class*="cookie"]',
+        '[class*="popup"]','[class*="modal"]','[role="navigation"]','[role="banner"]',
+        '[role="complementary"]','[role="dialog"]',
+      ];
+      const KEEP_ATTRS = new Set(['href','src','alt','colspan','rowspan']);
+
+      // メインコンテンツエリアを特定（article > main > body の優先順）
+      const main =
+        document.querySelector('article') ||
+        document.querySelector('[role="main"]') ||
+        document.querySelector('main') ||
+        document.querySelector('#content, #main-content, .article-body, .post-body, .entry-content') ||
+        document.body;
+
+      const clone = main.cloneNode(true);
+
+      // ノイズ要素を除去
+      for (const sel of NOISE) {
+        try { for (const el of clone.querySelectorAll(sel)) el.remove(); } catch {}
+      }
+
+      // 属性クリーニング（href/src等だけ残して他は全削除）
+      for (const el of clone.querySelectorAll('*')) {
+        const drop = [...el.attributes].filter(a => !KEEP_ATTRS.has(a.name)).map(a => a.name);
+        for (const a of drop) el.removeAttribute(a);
+      }
+
+      const cleanHtml = clone.outerHTML;
+      return {
+        cleanHtml,
+        title: document.title,
+        url: location.href,
+        charCount: cleanHtml.length,
+      };
+    },
+  });
+
+  return { success: true, ...result.result };
+}
+
+// Geminiのテキスト入力エリアにテキストを送る（MAIN world・self-contained）
+function geminiInjectText(text) {
+  function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+  function deepQuery(root, finder) {
+    const found = finder(root);
+    if (found) return found;
+    for (const el of root.querySelectorAll('*')) {
+      if (el.shadowRoot) {
+        const f = deepQuery(el.shadowRoot, finder);
+        if (f) return f;
+      }
+    }
+    return null;
+  }
+
+  const findTextInput = r => deepQuery(r, root =>
+    root.querySelector('rich-textarea') ||
+    root.querySelector('[contenteditable="true"]') ||
+    root.querySelector('[role="textbox"]')
+  );
+
+  return (async () => {
+    const input = findTextInput(document);
+    if (!input) return { success: false, error: "Geminiのテキスト入力が見つかりません" };
+
+    input.focus();
+    await sleep(150);
+    const dt = new DataTransfer();
+    dt.setData('text/plain', text);
+    input.dispatchEvent(new ClipboardEvent('paste', {
+      clipboardData: dt, bubbles: true, cancelable: true, composed: true,
+    }));
+    await sleep(600);
+    return { success: true };
+  })();
+}
+
 // GeminiページのMAIN worldで実行するファイル注入関数（self-contained）
 function geminiInjectMain(dataUrls) {
   function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
@@ -592,6 +718,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         sendResponse({ success: true });
       } else if (msg.type === "INJECT_TO_GEMINI") {
         sendResponse(await injectToGemini());
+      } else if (msg.type === "EXTRACT_DOM") {
+        const tabs = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+        if (!tabs[0]) { sendResponse({ success: false, error: "アクティブタブが見つかりません" }); return; }
+        sendResponse(await runExtractPageContent(tabs[0].id));
+      } else if (msg.type === "INJECT_TEXT_TO_GEMINI") {
+        const tab = await pickGeminiTab();
+        if (!tab) { sendResponse({ success: false, error: "Geminiのタブが見つかりません" }); return; }
+        const results = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          world: "MAIN",
+          func: geminiInjectText,
+          args: [msg.text],
+        });
+        sendResponse(results[0]?.result ?? { success: false, error: "実行結果が取得できませんでした" });
       } else {
         sendResponse({ success: false, error: "unknown type" });
       }
