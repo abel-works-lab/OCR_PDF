@@ -133,7 +133,7 @@ async function captureCurrentTab(label) {
   if (!tab) [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab) return { success: false, error: "アクティブタブが見つかりません" };
 
-  const dataUrl = await captureVisibleTabSafe(tab.windowId, { format: "jpeg", quality: 85 });
+  const dataUrl = await captureVisibleTabSafe(tab.windowId, { format: "jpeg", quality: 95 });
   const images = await getImages();
   images.push({
     id: crypto.randomUUID(),
@@ -165,7 +165,7 @@ async function scrollAndCapture(tabId, pageNumbers, delay = 1500) {
     }
     // PDFビューアはcomplete後も描画が続くため追加待機
     await new Promise(r => setTimeout(r, 400));
-    const dataUrl = await captureVisibleTabSafe(windowId, { format: "jpeg", quality: 85 });
+    const dataUrl = await captureVisibleTabSafe(windowId, { format: "jpeg", quality: 95 });
     newItems.push({
       id: crypto.randomUUID(),
       dataUrl,
@@ -283,7 +283,7 @@ async function startScrollCapture(tabId, windowId, mainOnlyMode = false) {
       // lazy load の DOM 安定待機（最大1秒）
       await waitForDomStable(tabId, 400, 1000);
 
-      const dataUrl = await captureVisibleTabSafe(windowId, { format: "jpeg", quality: 85 });
+      const dataUrl = await captureVisibleTabSafe(windowId, { format: "jpeg", quality: 95 });
       newItems.push({
         id: crypto.randomUUID(),
         dataUrl,
