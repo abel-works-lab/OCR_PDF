@@ -225,9 +225,8 @@ document.getElementById("btn-gemini-format").addEventListener("click", async () 
   if (!_extractedHtml) return;
   const btn = document.getElementById("btn-gemini-format");
   btn.disabled = true;
-  showStatus("Geminiに送信中...");
+  showStatus("クリップボードにコピー中...");
 
-  // 50KB超は innerText 相当に縮小して送る（Geminiの入力制限対策）
   const MAX_BYTES = 50 * 1024;
   let payload = _extractedHtml;
   if (payload.length > MAX_BYTES) {
@@ -244,21 +243,23 @@ document.getElementById("btn-gemini-format").addEventListener("click", async () 
 ${payload}
 \`\`\``;
 
-  let res;
   try {
-    res = await chrome.runtime.sendMessage({ type: "INJECT_TEXT_TO_GEMINI", text });
-  } catch (e) {
-    showStatus(e.message || "通信エラー", true);
+    await navigator.clipboard.writeText(text);
+  } catch {
+    showStatus("クリップボードへのコピーに失敗しました", true);
     btn.disabled = false;
     return;
   }
 
-  btn.disabled = false;
-  if (res?.success) {
-    showStatus("✓ Geminiに送りました");
-  } else {
-    showStatus(res?.error || "送信失敗", true);
+  // Geminiタブがあればアクティブにする
+  const tabs = await chrome.tabs.query({ url: "https://gemini.google.com/*" });
+  if (tabs.length > 0) {
+    await chrome.tabs.update(tabs[0].id, { active: true });
+    await chrome.windows.update(tabs[0].windowId, { focused: true });
   }
+
+  btn.disabled = false;
+  showStatus("✓ コピー完了！GeminiでCtrl+V（Mac: ⌘+V）を押してください", false, 15000);
 });
 
 document.getElementById("btn-scroll-capture").addEventListener("click", async () => {
