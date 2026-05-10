@@ -11,53 +11,120 @@
     <span class="badge" id="badge">0</span>
   </header>
 
-  <section class="section">
-    <button id="btn-capture" class="btn btn-primary">キャプチャ</button>
-  </section>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="scan">スキャン</button>
+    <button class="tab-btn" data-tab="html">HTML取得</button>
+  </div>
 
-  <section class="section">
-    <label class="label">ページ指定（例：1,3,5-7）</label>
-    <div class="row">
-      <input id="page-input" type="text" placeholder="1,3,5-7" />
-      <button id="btn-auto-capture" class="btn btn-secondary">自動キャプチャ</button>
+  <!-- インライン確認ダイアログ（ブラウザconfirm()の代替） -->
+  <div id="confirm-dialog" style="display:none; margin:8px 14px 0; padding:10px 12px; background:#1e1e3a; border:1px solid #e94560; border-radius:6px; flex-shrink:0;">
+    <p id="confirm-message" style="font-size:11px; color:#e0e0e0; line-height:1.5; margin-bottom:8px; white-space:pre-wrap;"></p>
+    <div style="display:flex; gap:6px;">
+      <button id="confirm-yes" class="btn btn-danger" style="flex:1;">続ける</button>
+      <button id="confirm-no" class="btn btn-secondary" style="flex:1;">キャンセル</button>
     </div>
-    <div class="row" style="margin-top:6px;">
-      <label class="label" style="margin:0;white-space:nowrap;">速度：</label>
-      <select id="capture-speed" style="flex:1;padding:4px 6px;border-radius:6px;border:1px solid #444;background:#2a2a2a;color:#eee;">
-        <option value="800">速い（0.8秒）</option>
-        <option value="1500" selected>普通（1.5秒）</option>
-        <option value="3000">遅い（3秒）</option>
-        <option value="5000">かなり遅い（5秒）</option>
-      </select>
-    </div>
-  </section>
+  </div>
 
-  <section class="section">
-    <label class="label">DOM取得（WebページのHTML直接抽出）</label>
-    <button id="btn-extract-dom" class="btn btn-secondary" style="width:100%;">HTMLを取得</button>
-    <div id="dom-result" class="dom-result" style="display:none;">
-      <div id="dom-info" class="dom-info"></div>
+  <!-- スキャンタブ -->
+  <div id="tab-scan" class="tab-content active">
+    <section class="section">
+      <button id="btn-capture" class="btn btn-primary">キャプチャ</button>
+    </section>
+
+    <section class="section">
+      <label class="label">ページ指定（例：1,3,5-7）</label>
+      <div class="row">
+        <input id="page-input" type="text" placeholder="1,3,5-7" />
+        <button id="btn-auto-capture" class="btn btn-secondary">自動キャプチャ</button>
+      </div>
       <div class="row" style="margin-top:6px;">
-        <button id="btn-copy-html" class="btn btn-secondary" style="flex:1;">コピー</button>
-        <button id="btn-gemini-format" class="btn btn-accent" style="flex:1;">Geminiで整形</button>
+        <label class="label" style="margin:0;white-space:nowrap;">速度：</label>
+        <select id="capture-speed" style="flex:1;padding:4px 6px;border-radius:6px;border:1px solid #444;background:#2a2a2a;color:#eee;">
+          <option value="800">速い（0.8秒）</option>
+          <option value="1500" selected>普通（1.5秒）</option>
+          <option value="3000">遅い（3秒）</option>
+          <option value="5000">かなり遅い（5秒）</option>
+        </select>
+      </div>
+    </section>
+
+    <section class="section">
+      <label class="label">スクロールキャプチャ（Note・ブログ等）</label>
+      <div class="row" style="margin-bottom:6px;">
+        <label class="toggle-label">
+          <input type="checkbox" id="main-only-toggle" checked />
+          <span>ヘッダー・サイドバーを非表示にしてキャプチャ</span>
+        </label>
+      </div>
+      <div class="row">
+        <button id="btn-scroll-capture" class="btn btn-secondary" style="flex:1;">全体スクロールキャプチャ</button>
+        <button id="btn-abort-scroll" class="btn btn-danger" style="display:none;">中断</button>
+      </div>
+      <div id="scroll-progress" class="scroll-progress" style="display:none;"></div>
+    </section>
+  </div>
+
+  <!-- HTML取得タブ -->
+  <div id="tab-html" class="tab-content">
+    <section class="section" style="flex-shrink:0;">
+      <label class="label">WebページのHTML直接抽出</label>
+      <div class="row" style="margin-bottom:6px;">
+        <label class="toggle-label">
+          <input type="checkbox" id="dom-main-only-toggle" checked />
+          <span>ナビ・サイドバーを除外する</span>
+        </label>
+      </div>
+      <button id="btn-extract-dom" class="btn btn-secondary" style="width:100%;">HTMLを取得</button>
+    </section>
+    <!-- dom-resultをsectionの外に出してflex:1で高さを確保 -->
+    <div id="dom-result" class="dom-result" style="display:none; flex:1; flex-direction:column; min-height:0; padding:6px 14px 10px;">
+      <div id="dom-info" class="dom-info"></div>
+      <iframe id="html-preview" class="html-preview" sandbox="allow-popups"></iframe>
+      <div style="display:flex;gap:6px;margin-top:6px;flex:none;">
+        <button id="btn-copy-html" class="btn btn-secondary" style="flex:1;">HTMLをコピー</button>
+        <button id="btn-copy-html-gemini" class="btn btn-accent" style="flex:1;">Gemini用コピー</button>
+      </div>
+      <!-- GAS公開パネル -->
+      <div id="gas-panel" style="margin-top:8px;flex:none;">
+        <!-- GAS URL設定（折りたたみ） -->
+        <details id="gas-settings" style="margin-bottom:6px;">
+          <summary style="font-size:11px;color:#888;cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:4px;">
+            ▸ GAS URL設定
+          </summary>
+          <div style="margin-top:6px;display:flex;gap:4px;">
+            <input id="gas-url-input" type="url" placeholder="https://script.google.com/macros/s/.../exec"
+              style="flex:1;padding:5px 8px;font-size:11px;background:#0f3460;border:1px solid #1a4a80;border-radius:4px;color:#e0e0e0;" />
+            <button id="btn-gas-url-save" class="btn btn-secondary" style="font-size:11px;padding:5px 8px;white-space:nowrap;">保存</button>
+          </div>
+          <div style="margin-top:4px;display:flex;gap:4px;align-items:center;">
+            <label style="font-size:10px;color:#888;white-space:nowrap;">公開名(slug):</label>
+            <input id="gas-slug-input" type="text" placeholder="my-page（省略=default）"
+              style="flex:1;padding:4px 8px;font-size:11px;background:#0f3460;border:1px solid #1a4a80;border-radius:4px;color:#e0e0e0;" />
+          </div>
+        </details>
+        <!-- 公開ボタン -->
+        <button id="btn-publish-gas" class="btn" style="width:100%;background:#1e3a5f;border:1px solid #2a5a9f;color:#7ab8f5;font-size:12px;">
+          GASに公開
+        </button>
+        <!-- 結果表示 -->
+        <div id="gas-result" style="display:none;margin-top:6px;padding:8px 10px;background:#0d2a1a;border:1px solid #1a6a3a;border-radius:4px;">
+          <div style="font-size:10px;color:#4caf50;margin-bottom:4px;">公開完了</div>
+          <a id="gas-result-link" href="#" target="_blank" rel="noopener noreferrer"
+            style="font-size:11px;color:#7ab8f5;word-break:break-all;display:block;margin-bottom:4px;"></a>
+          <button id="btn-copy-gas-url" class="btn btn-secondary" style="font-size:10px;padding:3px 8px;">URLをコピー</button>
+        </div>
+      </div>
+
+      <!-- H2分割パネル：H2見出しが検出されたときだけ表示 -->
+      <div id="sections-panel" style="display:none; margin-top:8px; flex:none;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:11px;font-weight:700;color:#c0c0c0;">セクション別コピー</span>
+          <span style="font-size:10px;color:#666;">Googleサイト埋め込み用</span>
+        </div>
+        <div id="sections-list" style="display:flex;flex-direction:column;gap:4px;max-height:180px;overflow-y:auto;"></div>
       </div>
     </div>
-  </section>
-
-  <section class="section">
-    <label class="label">スクロールキャプチャ（Note・ブログ等）</label>
-    <div class="row" style="margin-bottom:6px;">
-      <label class="toggle-label">
-        <input type="checkbox" id="main-only-toggle" checked />
-        <span>ヘッダー・サイドバーを非表示にしてキャプチャ</span>
-      </label>
-    </div>
-    <div class="row">
-      <button id="btn-scroll-capture" class="btn btn-secondary" style="flex:1;">全体スクロールキャプチャ</button>
-      <button id="btn-abort-scroll" class="btn btn-danger" style="display:none;">中断</button>
-    </div>
-    <div id="scroll-progress" class="scroll-progress" style="display:none;"></div>
-  </section>
+  </div>
 
   <section class="section grid-section">
     <div id="image-grid" class="image-grid"></div>

@@ -243,7 +243,19 @@ footer {
 }
 
 .dom-result {
-  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.html-preview {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  background: #fff;
+  border: 1px solid #1a4a80;
+  border-radius: 4px;
+  margin-top: 4px;
 }
 
 .dom-info {
@@ -278,4 +290,52 @@ footer {
   font-size: 11px;
   color: #4caf50;
   text-align: center;
+}
+
+.tabs {
+  display: flex;
+  background: #16213e;
+  border-bottom: 1px solid #0f3460;
+  flex-shrink: 0;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 8px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: #888;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: color 0.15s;
+}
+
+.tab-btn.active {
+  color: #e94560;
+  border-bottom-color: #e94560;
+}
+
+.tab-btn:hover:not(.active) {
+  color: #ccc;
+}
+
+.tab-content {
+  display: none;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.tab-content.active {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+/* HTMLタブだけ残り高さを全部使う（textareaが表示されるように） */
+#tab-html.tab-content.active {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
